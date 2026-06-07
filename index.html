@@ -6,6 +6,54 @@
     <title>Finans Asistanı v80</title>
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
+    import { getFirestore, doc, setDoc, onSnapshot, collection, deleteDoc } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyB2X4h-S5itIOfPRJOkIz5nYKdvGE_3CEY",
+        authDomain: "harcai.firebaseapp.com",
+        projectId: "harcai",
+        storageBucket: "harcai.firebasestorage.app",
+        messagingSenderId: "384120907737",
+        appId: "1:384120907737:web:d578a4c9aedc2a3a675bc8"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const FAMILY_ID = "aile1"; // Sabit aile ID - iki telefon da aynıya bağlanır
+
+    // Firestore'a kaydet
+    async function syncToCloud(key, data) {
+        try {
+            await setDoc(doc(db, "finans", FAMILY_ID), { [key]: JSON.stringify(data), updatedAt: Date.now() }, { merge: true });
+        } catch(e) { console.warn("Sync hatası:", e); }
+    }
+
+    // Firestore'dan dinle - değişince otomatik güncelle
+    function listenCloud() {
+        onSnapshot(doc(db, "finans", FAMILY_ID), (snap) => {
+            if (!snap.exists()) return;
+            const d = snap.data();
+            let changed = false;
+            if (d.expenses)     { localStorage.setItem('fa80_ex',  d.expenses);  changed = true; }
+            if (d.incomes)      { localStorage.setItem('fa80_inc', d.incomes);   changed = true; }
+            if (d.fixed)        { localStorage.setItem('fa80_fix', d.fixed);     changed = true; }
+            if (d.goal)         { localStorage.setItem('fa80_goal',d.goal);      changed = true; }
+            if (d.cats)         { localStorage.setItem('fa80_cats',d.cats);      changed = true; }
+            if (d.pays)         { localStorage.setItem('fa80_pays',d.pays);      changed = true; }
+            if (d.inct)         { localStorage.setItem('fa80_inct',d.inct);      changed = true; }
+            if (changed && window._appReady) {
+                window._reloadFromStorage();
+            }
+        });
+    }
+
+    // Global erişim için window'a ekle
+    window._syncToCloud = syncToCloud;
+    window._listenCloud = listenCloud;
+    window.addEventListener('load', () => { listenCloud(); });
+    </script>
     <style>
         :root {
             --bg:#f1f5f9; --card:#ffffff; --text:#0f172a; --subtext:#64748b;
@@ -129,7 +177,7 @@
                 <option value="₽">₽ RUB</option>
                 <option value="¥">¥ JPY</option>
             </select>
-            <div class="hdr-title">💰 Finans Asistanı</div>
+            <div class="hdr-title">💰 Finans Asistanı <span id="syncDot" style="font-size:9px;opacity:0.6;">☁️</span></div>
             <button class="dark-btn" id="darkBtn">🌙</button>
         </div>
         <select id="monthFilter" class="month-sel"></select>
@@ -308,6 +356,16 @@
         localStorage.setItem(SK.fix,JSON.stringify(fixed));
         localStorage.setItem(SK.goal,goal);
         localStorage.setItem(SK.cur,cur);
+        // Bulut senkronizasyonu
+        if(window._syncToCloud){
+            window._syncToCloud('expenses', expenses);
+            window._syncToCloud('incomes',  incomes);
+            window._syncToCloud('fixed',    fixed);
+            window._syncToCloud('goal',     goal);
+            window._syncToCloud('cats',     cats);
+            window._syncToCloud('pays',     pays);
+            window._syncToCloud('inct',     inct);
+        }
     }
     load();
 
@@ -727,11 +785,21 @@
         setTimeout(()=>window.scrollTo(0,0),100);
     });
 
+    // ── BULUT GÜNCELLEME FONKSİYONU ──────────────────────────────
+    window._reloadFromStorage = function() {
+        load(); // localStorage'dan yeniden yükle
+        renderMgmt();
+        buildMonths();
+        refreshAll();
+        toast('☁️ Veriler güncellendi');
+    };
+
     // ── INIT ──────────────────────────────────────────────────────
     document.getElementById('prodDate').value=today();
     document.getElementById('incomeDate').value=today();
     document.getElementById('apiKeyInput').value=apiKey;
     renderMgmt();buildMonths();refreshAll();switchTab('addTab');
+    setTimeout(()=>{ window._appReady = true; }, 2000); // 2sn sonra cloud dinlemeye başla
 })();
 </script>
 </body>
